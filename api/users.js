@@ -149,6 +149,13 @@ router.put('/update/:id', upload.single('profile'), async (req, res) => {
         // Update user data
         await userRef.update(updatedData);
 
+        const vendorRef = db.collection('vendors').doc(id);
+        const docVendor = await vendorRef.get();
+
+        if (docVendor.exists) {
+            await vendorRef.update({ profile: profileUrl || userData.profile });
+        }
+
         return res.status(200).json({
             status: "success",
             message: 'Data user berhasil diperbarui',
