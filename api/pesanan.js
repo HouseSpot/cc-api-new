@@ -213,24 +213,46 @@ router.get('/view_by_client/:id_pemesan', async (req, res) => {
 router.get('/view_by_vendor/:id_vendor', async (req, res) => {
     try {
         const { id_vendor } = req.params;
+        const { status } = req.query;
 
-        const ordersSnapshot = await db.collection('orders').where('id_vendor', '==', id_vendor).get();
+        const statuses = status ? status.split(',') : [];
+        let ordersSnapshot;
+        const orders = [];
 
-        if (ordersSnapshot.empty) {
-            return res.status(404).json({ status: 'error', message: 'Pesanan tidak ditemukan untuk ID vendor yang diberikan' });
+        if (statuses.length > 0) {
+            for (const status of statuses) {
+                ordersSnapshot = await db.collection('orders')
+                    .where('id_vendor', '==', id_vendor)
+                    .where('status', '==', status)
+                    .get();
+                if (!ordersSnapshot.empty) {
+                    ordersSnapshot.forEach(doc => {
+                        orders.push(doc.data());
+                    });
+                }
+            }
+        } else {
+            ordersSnapshot = await db.collection('orders')
+                .where('id_vendor', '==', id_vendor)
+                .get();
+            if (!ordersSnapshot.empty) {
+                ordersSnapshot.forEach(doc => {
+                    orders.push(doc.data());
+                });
+            }
         }
 
-        const orders = [];
-        ordersSnapshot.forEach(doc => {
-            orders.push(doc.data());
-        });
+        if (orders.length === 0) {
+            return res.status(404).json({ status: 'error', message: 'Pesanan tidak ditemukan untuk ID vendor yang diberikan atau status yang diberikan' });
+        }
 
         return res.status(200).json({ status: 'success', data: orders });
     } catch (error) {
         console.error('Error:', error);
-        return res.status(500).json({ status: 'error', message: 'Terjadi kesalahan saat melihat pesanan berdasarkan ID vendor' });
+        return res.status(500).json({ status: 'error', message: 'Terjadi kesalahan saat melihat pesanan berdasarkan ID vendor dan status' });
     }
 });
+
 
 
 

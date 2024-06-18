@@ -6,6 +6,9 @@ const crypto = require('crypto');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 
+const cloudinary = require('./cloudinary'); 
+const streamifier = require('streamifier'); 
+
 // Inisialisasi Firebase Admin SDK
 const serviceAccount = require('../serviceAccountKey.json');
 admin.initializeApp({
@@ -15,28 +18,8 @@ admin.initializeApp({
 const db = admin.firestore();
 const router = express.Router();
 
-// Storage untuk menyimpan foto portofolio
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, 'uploads/')
-    },
-    filename: function (req, file, cb) {
-        const hash = crypto.createHash('sha256').update(file.originalname).digest('hex');
-        const fileExt = path.extname(file.originalname);
-        cb(null, `${hash}${fileExt}`);
-    }
-});
-
-// Filter untuk hanya menerima file dengan tipe gambar
-const fileFilter = (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
-        cb(null, true);
-    } else {
-        cb(new Error('Hanya diperbolehkan mengunggah file gambar'), false);
-    }
-};
-
-const upload = multer({ storage: storage, fileFilter: fileFilter });
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
 
 router.get("/", (req, res) => {
     res.json({
@@ -48,13 +31,6 @@ router.get("/", (req, res) => {
 router.post('/daftar', upload.single('profile'), async (req, res) => {
     try {
         const { email, nama, no_hp, peran, password, confirmPassword } = req.body;
-
-        // Generate URL for profile photo
-        let profileUrl = '';
-        if (req.file) {
-            const filePath = req.file.path;
-            profileUrl = `${req.protocol}://${req.get('host')}/${filePath}`;
-        }
 
         if (!email || !nama || !no_hp || !peran || !password || !confirmPassword) {
             return res.status(400).json({
@@ -82,6 +58,13 @@ router.post('/daftar', upload.single('profile'), async (req, res) => {
             });
         }
 
+        // Upload profile image to Cloudinary
+        let profileUrl = '';
+        if (req.file) {
+            const result = await uploadToCloudinary(req.file.buffer);
+            profileUrl = result.secure_url;
+        }
+
         // Add user data to Firestore with a generated ID
         const id = uuidv4();
         await usersRef.doc(id).set({
@@ -106,6 +89,7 @@ router.post('/daftar', upload.single('profile'), async (req, res) => {
         });
     }
 });
+
 
 // GET data user berdasarkan id
 router.get('/:id', async (req, res) => {
@@ -146,14 +130,14 @@ router.put('/update/:id', upload.single('profile'), async (req, res) => {
 
         const userData = doc.data();
 
-        // Menghasilkan URL foto portofolio
+        // Upload new profile image to Cloudinary if provided
         let profileUrl = userData.profile;
         if (req.file) {
-            const filePath = req.file.path;
-            profileUrl = `${req.protocol}://${req.get('host')}/${filePath}`;
+            const result = await uploadToCloudinary(req.file.buffer);
+            profileUrl = result.secure_url;
         }
 
-        // Memeriksa setiap nilai yang dikirim melalui req.body
+        // Check each value sent through req.body
         const updatedData = {
             nama: nama || userData.nama,
             no_hp: no_hp || userData.no_hp,
@@ -162,7 +146,7 @@ router.put('/update/:id', upload.single('profile'), async (req, res) => {
             password: password ? await bcrypt.hash(password, 10) : userData.password
         };
 
-        // Update data user
+        // Update user data
         await userRef.update(updatedData);
 
         return res.status(200).json({
@@ -258,5 +242,19 @@ router.post('/auth', async (req, res) => {
         });
     }
 });
+
+async function uploadToCloudinary(buffer) {
+    return new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream((error, result) => {
+            if (result) {
+                resolve(result);
+            } else {
+                reject(error);
+            }
+        });
+
+        streamifier.createReadStream(buffer).pipe(uploadStream);
+    });
+}
 
 module.exports = router;

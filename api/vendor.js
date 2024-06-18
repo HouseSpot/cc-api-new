@@ -2,38 +2,32 @@ const express = require('express');
 const router = express.Router();
 const admin = require('firebase-admin');
 const multer = require('multer');
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
+const cloudinary = require('./cloudinary'); 
+const streamifier = require('streamifier'); 
 
 const db = admin.firestore();
 
-// Storage configuration for portfolio photos
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, 'uploads/');
-    },
-    filename: function (req, file, cb) {
-        // Generate filename based on SHA256 hash
-        const hash = crypto.createHash('sha256').update(file.originalname).digest('hex');
-        const fileExt = path.extname(file.originalname);
-        cb(null, `${hash}${fileExt}`);
-    }
-});
+// Use memory storage for multer
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
 
-// File filter to only accept image files
-const fileFilter = (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
-        cb(null, true);
-    } else {
-        cb(new Error('Only image files are allowed'), false);
-    }
-};
+// Helper function to upload to Cloudinary
+async function uploadToCloudinary(buffer) {
+    return new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream((error, result) => {
+            if (result) {
+                resolve(result);
+            } else {
+                reject(error);
+            }
+        });
+        streamifier.createReadStream(buffer).pipe(uploadStream);
+    });
+}
 
-const upload = multer({ storage: storage, fileFilter: fileFilter });
 
-// Menambah data vendor
+// Add new vendor
 router.post('/add', upload.array('portofolio', 10), async (req, res) => {
     try {
         const {
@@ -63,13 +57,12 @@ router.post('/add', upload.array('portofolio', 10), async (req, res) => {
         const tipeLayananArray = Array.isArray(tipe_layanan) ? tipe_layanan : [tipe_layanan];
         const jasaKontraktorArray = Array.isArray(jasa_kontraktor) ? jasa_kontraktor : [jasa_kontraktor];
 
-        // Generate URLs for portfolio photos
+        // Upload portfolio photos to Cloudinary
         let portofolioUrls = [];
         if (req.files) {
-            portofolioUrls = req.files.map(file => {
-                const filePath = file.path;
-                return `${req.protocol}://${req.get('host')}/${filePath}`;
-            });
+            const uploadPromises = req.files.map(file => uploadToCloudinary(file.buffer));
+            const results = await Promise.all(uploadPromises);
+            portofolioUrls = results.map(result => result.secure_url);
         }
 
         // Add vendor data to Firestore
@@ -279,7 +272,6 @@ router.get('/:id', async (req, res) => {
 });
 
 
-
 // Update data vendor berdasarkan id
 router.put('/:id', upload.array('portofolio', 10), async (req, res) => {
     try {
@@ -304,12 +296,12 @@ router.put('/:id', upload.array('portofolio', 10), async (req, res) => {
         const vendorData = doc.data();
 
         // Generate URLs for portfolio photos
-        let portofolioUrls = vendorData.portofolio;
+        let portofolioUrls = vendorData.portofolio || [];
         if (req.files && req.files.length > 0) {
-            portofolioUrls = req.files.map(file => {
-                const filePath = file.path;
-                return `${req.protocol}://${req.get('host')}/${filePath}`;
-            });
+            const uploadPromises = req.files.map(file => uploadToCloudinary(file.buffer));
+            const results = await Promise.all(uploadPromises);
+            const newUrls = results.map(result => result.secure_url);
+            portofolioUrls = portofolioUrls.concat(newUrls);
         }
 
         // Parse `tipe_layanan` and `jasa_kontraktor` as arrays if they are not already
@@ -336,8 +328,6 @@ router.put('/:id', upload.array('portofolio', 10), async (req, res) => {
         return res.status(500).json({ status: 'error', message: 'Terjadi kesalahan saat memperbarui data vendor' });
     }
 });
-
-
 
 
 // Hapus data vendor berdasarkan id
