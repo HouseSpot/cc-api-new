@@ -37,7 +37,6 @@ router.post('/add', async (req, res) => {
 });
 
 router.get('/view/:id_vendor', async (req, res) => {
-    console.log(req.params);
     try {
         const { id_vendor } = req.params;
 
@@ -65,7 +64,6 @@ router.get('/view/:id_vendor', async (req, res) => {
 });
 
 router.get('/view_by_client', async (req, res) => {
-    console.log(req.query);
     try {
         const { id_vendor, id_client } = req.query;
 
