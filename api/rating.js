@@ -37,6 +37,7 @@ router.post('/add', async (req, res) => {
 });
 
 router.get('/view/:id_vendor', async (req, res) => {
+    console.log(req.params);
     try {
         const { id_vendor } = req.params;
 
@@ -63,7 +64,8 @@ router.get('/view/:id_vendor', async (req, res) => {
     }
 });
 
-router.get('/view/client', async (req, res) => {
+router.get('/view_by_client', async (req, res) => {
+    console.log(req.query);
     try {
         const { id_vendor, id_client } = req.query;
 
@@ -80,12 +82,7 @@ router.get('/view/client', async (req, res) => {
             return res.status(200).json({ status: 'success', message: 'Tidak ada rating yang kamu berikan', data: null });
         }
 
-        const ratings = [];
-        ratingSnapshot.forEach(doc => {
-            ratings.push(doc.data());
-        });
-
-        return res.status(200).json({ status: 'success', message: 'Terdapat rating yang kamu berikan', data: ratings });
+        return res.status(200).json({ status: 'success', message: 'Terdapat rating yang kamu berikan', data: ratingSnapshot.docs[0].data() });
     } catch (error) {
         console.error('Error:', error);
         return res.status(500).json({ status: 'error', message: 'Terjadi kesalahan saat mengambil rating', data: null });
