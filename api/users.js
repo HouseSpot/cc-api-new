@@ -151,14 +151,14 @@ router.put('/update/:id', upload.single('profile'), async (req, res) => {
         return res.status(200).json({
             status: "success",
             message: 'Data user berhasil diperbarui',
-            data: id
+            data: { id, ...updatedData}
         });
     } catch (error) {
         console.error('Error:', error);
         return res.status(500).json({
             status: "error",
             message: 'Terjadi kesalahan saat memperbarui data user',
-            data: id
+            data: { id }
         });
     }
 });
