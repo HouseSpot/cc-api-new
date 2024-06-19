@@ -8,7 +8,6 @@ const { v4: uuidv4 } = require('uuid');
 const db = admin.firestore();
 const router = express.Router();
 
-// Fungsi untuk membaca file CSV dan mengembalikan data sebagai array objek
 const parseCsv = async (filePath) => {
     const data = [];
     return new Promise((resolve, reject) => {
@@ -90,7 +89,6 @@ router.post('/estimate', async (req, res) => {
     }
 });
 
-// Tambah pesanan
 router.post('/add', async (req, res) => {
     try {
         const { id_pemesan, id_vendor, serviceType, propertyType, budget, startDate, endDate, projectDescription, materialProvider } = req.body;
@@ -117,12 +115,10 @@ router.post('/add', async (req, res) => {
     }
 });
 
-// Update pesanan
 router.put('/update/:id', async (req, res) => {
     try {
         const { id } = req.params;
 
-        // Get the existing order data from the database
         const orderRef = db.collection('orders').doc(id);
         const orderSnapshot = await orderRef.get();
 
@@ -130,14 +126,12 @@ router.put('/update/:id', async (req, res) => {
             return res.status(404).json({ status: 'error', message: 'Pesanan tidak ditemukan' });
         }
 
-        // Get the status from the request body
         const { status } = req.body;
 
         if (!status) {
             return res.status(400).json({ status: 'error', message: 'Status tidak diberikan' });
         }
 
-        // Update the order status
         await orderRef.update({ status });
 
         return res.status(200).json({ status: 'success', message: 'Status pesanan berhasil diperbarui' });
@@ -147,7 +141,6 @@ router.put('/update/:id', async (req, res) => {
     }
 });
 
-// Hapus pesanan
 router.delete('/delete/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -168,7 +161,6 @@ router.delete('/delete/:id', async (req, res) => {
     }
 });
 
-// Lihat pesanan
 router.get('/view/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -186,7 +178,6 @@ router.get('/view/:id', async (req, res) => {
     }
 });
 
-// Lihat pesanan berdasarkan id_pemesan
 router.get('/view_by_client/:id_pemesan', async (req, res) => {
     try {
         const { id_pemesan } = req.params;
@@ -198,9 +189,24 @@ router.get('/view_by_client/:id_pemesan', async (req, res) => {
         }
 
         const orders = [];
-        ordersSnapshot.forEach(doc => {
-            orders.push(doc.data());
-        });
+        for (const doc of ordersSnapshot.docs) {
+            const data = doc.data();
+            const id_vendor = data.id_vendor;
+
+            const userSnapshot = await db.collection('users').doc(id_vendor).get();
+            if (userSnapshot.exists) {
+                const vendorData = userSnapshot.data();
+                data.vendor_info = {
+                    email: vendorData.email,
+                    nama: vendorData.nama,
+                    no_hp: vendorData.no_hp
+                };
+            } else {
+                data.vendor_info = null;
+            }
+
+            orders.push(data);
+        }
 
         return res.status(200).json({ status: 'success', data: orders });
     } catch (error) {
@@ -209,7 +215,6 @@ router.get('/view_by_client/:id_pemesan', async (req, res) => {
     }
 });
 
-// Lihat pesanan berdasarkan ID vendor
 router.get('/view_by_vendor/:id_vendor', async (req, res) => {
     try {
         const { id_vendor } = req.params;
@@ -243,7 +248,7 @@ router.get('/view_by_vendor/:id_vendor', async (req, res) => {
         }
 
         if (orders.length === 0) {
-            return res.status(404).json({ status: 'error', message: 'Pesanan tidak ditemukan untuk ID vendor yang diberikan atau status yang diberikan' });
+            return res.status(200).json({ status: 'success', message: 'Pesanan tidak ditemukan untuk ID vendor yang diberikan atau status yang diberikan' });
         }
 
         return res.status(200).json({ status: 'success', data: orders });

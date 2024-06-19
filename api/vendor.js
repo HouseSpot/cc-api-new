@@ -8,11 +8,9 @@ const streamifier = require('streamifier');
 
 const db = admin.firestore();
 
-// Use memory storage for multer
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
-// Helper function to upload to Cloudinary
 async function uploadToCloudinary(buffer) {
     return new Promise((resolve, reject) => {
         const uploadStream = cloudinary.uploader.upload_stream((error, result) => {
@@ -27,7 +25,6 @@ async function uploadToCloudinary(buffer) {
 }
 
 
-// Add new vendor
 router.post('/add', upload.array('portofolio', 10), async (req, res) => {
     try {
         const {
@@ -37,7 +34,8 @@ router.post('/add', upload.array('portofolio', 10), async (req, res) => {
             jasa_kontraktor,
             lokasi_kantor,
             deskripsi_layanan,
-            iklan_persetujuan
+            iklan_persetujuan,
+            fee_minimum
         } = req.body;
 
         const userRef = db.collection('users').doc(id);
@@ -53,11 +51,9 @@ router.post('/add', upload.array('portofolio', 10), async (req, res) => {
 
         const userData = doc.data();
 
-        // Parse `tipe_layanan` and `jasa_kontraktor` as arrays if they are not already
         const tipeLayananArray = Array.isArray(tipe_layanan) ? tipe_layanan : [tipe_layanan];
         const jasaKontraktorArray = Array.isArray(jasa_kontraktor) ? jasa_kontraktor : [jasa_kontraktor];
 
-        // Upload portfolio photos to Cloudinary
         let portofolioUrls = [];
         if (req.files) {
             const uploadPromises = req.files.map(file => uploadToCloudinary(file.buffer));
@@ -65,9 +61,8 @@ router.post('/add', upload.array('portofolio', 10), async (req, res) => {
             portofolioUrls = results.map(result => result.secure_url);
         }
 
-        // Add vendor data to Firestore
         await db.collection('vendors').doc(id).set({
-            id, // Linking vendor to the user
+            id,
             tipe_layanan: tipeLayananArray,
             jenis_properti,
             jasa_kontraktor: jasaKontraktorArray,
@@ -75,7 +70,8 @@ router.post('/add', upload.array('portofolio', 10), async (req, res) => {
             deskripsi_layanan,
             profile: userData.profile,
             portofolio: portofolioUrls,
-            iklan_persetujuan
+            iklan_persetujuan,
+            fee_minimum
         });
 
         return res.status(201).json({ status: 'success', message: 'Data vendor berhasil ditambahkan' });
@@ -86,7 +82,6 @@ router.post('/add', upload.array('portofolio', 10), async (req, res) => {
 });
 
 
-// Helper function to calculate average rating
 function calculateAverageRating(ratingsSnapshot) {
     if (ratingsSnapshot.empty) {
         return 0;
@@ -97,7 +92,6 @@ function calculateAverageRating(ratingsSnapshot) {
 }
 
 
-// Menampilkan semua data vendor
 router.get('/all', async (req, res) => {
     try {
         const vendorsSnapshot = await db.collection('vendors').get();
@@ -105,7 +99,6 @@ router.get('/all', async (req, res) => {
         const vendorsList = await Promise.all(vendorsSnapshot.docs.map(async (doc) => {
             let data = doc.data();
 
-            // Mengambil data pemilik dari koleksi users
             const userSnapshot = await db.collection('users').doc(data.id).get();
             if (userSnapshot.exists) {
                 const userData = userSnapshot.data();
@@ -116,7 +109,6 @@ router.get('/all', async (req, res) => {
                 };
             }
 
-            // Mengambil semua rating untuk id_vendor tertentu
             const ratingsSnapshot = await db.collection('ratings').where('id_vendor', '==', data.id).get();
             data.rating = calculateAverageRating(ratingsSnapshot);
 
@@ -135,7 +127,6 @@ router.get('/filter', async (req, res) => {
     try {
         const { tipe_layanan, lokasi_kantor, rating, jenis_jasa, harga_minimum, harga_maksimum, nama_vendor } = req.query;
 
-        // Convert all query parameters to lowercase and trim spaces
         const filterOptions = {
             tipe_layanan: tipe_layanan ? tipe_layanan.toLowerCase().trim().split(',') : [],
             lokasi_kantor: lokasi_kantor ? lokasi_kantor.toLowerCase().trim() : '',
@@ -152,11 +143,9 @@ router.get('/filter', async (req, res) => {
             const data = doc.data();
             let matches = true;
 
-            // Mengambil semua rating untuk id_vendor tertentu
             const ratingsSnapshot = await db.collection('ratings').where('id_vendor', '==', data.id).get();
             const averageRating = calculateAverageRating(ratingsSnapshot);
 
-            // Filter by Tipe Layanan
             if (filterOptions.tipe_layanan.length > 0) {
                 if (data.tipe_layanan && Array.isArray(data.tipe_layanan)) {
                     const tipeLayananArray = data.tipe_layanan.map(item => item.toLowerCase());
@@ -169,17 +158,14 @@ router.get('/filter', async (req, res) => {
                 }
             }
 
-            // Filter by Lokasi Kantor
             if (filterOptions.lokasi_kantor && data.lokasi_kantor && data.lokasi_kantor.toLowerCase() !== filterOptions.lokasi_kantor) {
                 matches = false;
             }
 
-            // Filter by Rating
             if (filterOptions.rating && averageRating < filterOptions.rating) {
                 matches = false;
             }
 
-            // Filter by Jenis Jasa
             if (filterOptions.jenis_jasa.length > 0) {
                 if (data.jasa_kontraktor && Array.isArray(data.jasa_kontraktor)) {
                     const jenisJasaArray = data.jasa_kontraktor.map(item => item.toLowerCase());
@@ -192,7 +178,6 @@ router.get('/filter', async (req, res) => {
                 }
             }
 
-            // Filter by Nama Vendor
             if (filterOptions.nama_vendor && data.nama_vendor) {
                 const vendorName = data.nama_vendor.toLowerCase();
                 if (!vendorName.includes(filterOptions.nama_vendor)) {
@@ -200,7 +185,6 @@ router.get('/filter', async (req, res) => {
                 }
             }
 
-            // Filter by Harga Range (assuming `harga_minimum` and `harga_maksimum` fields exist in data)
             if (filterOptions.harga_minimum && data.harga && data.harga < filterOptions.harga_minimum) {
                 matches = false;
             }
@@ -209,7 +193,6 @@ router.get('/filter', async (req, res) => {
             }
 
             if (matches) {
-                // Mengambil data pemilik dari koleksi users
                 const userSnapshot = await db.collection('users').doc(data.id).get();
                 if (userSnapshot.exists) {
                     const userData = userSnapshot.data();
@@ -225,7 +208,6 @@ router.get('/filter', async (req, res) => {
             return null;
         }));
 
-        // Filter out null values
         const filteredVendorsList = vendorsList.filter(vendor => vendor !== null);
 
         return res.status(200).json(filteredVendorsList);
@@ -235,7 +217,6 @@ router.get('/filter', async (req, res) => {
     }
 });
 
-// Menampilkan detail data vendor berdasarkan id
 router.get('/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -249,11 +230,9 @@ router.get('/:id', async (req, res) => {
 
         const data = doc.data();
         
-        // Mengambil semua rating untuk id_vendor tertentu
         const ratingsSnapshot = await db.collection('ratings').where('id_vendor', '==', data.id).get();
         data.rating = calculateAverageRating(ratingsSnapshot);
 
-        // Mengambil data pemilik dari koleksi users berdasarkan id
         const userSnapshot = await db.collection('users').doc(data.id).get();
         if (userSnapshot.exists) {
             const userData = userSnapshot.data();
@@ -272,7 +251,6 @@ router.get('/:id', async (req, res) => {
 });
 
 
-// Update data vendor berdasarkan id
 router.put('/:id', upload.array('portofolio', 10), async (req, res) => {
     try {
         const { id } = req.params;
@@ -283,7 +261,8 @@ router.put('/:id', upload.array('portofolio', 10), async (req, res) => {
             jasa_kontraktor,
             lokasi_kantor,
             deskripsi_layanan,
-            iklan_persetujuan
+            iklan_persetujuan,
+            fee_minimum
         } = req.body;
 
         const vendorRef = db.collection('vendors').doc(id);
@@ -295,7 +274,6 @@ router.put('/:id', upload.array('portofolio', 10), async (req, res) => {
 
         const vendorData = doc.data();
 
-        // Generate URLs for portfolio photos
         let portofolioUrls = vendorData.portofolio || [];
         if (req.files && req.files.length > 0) {
             const uploadPromises = req.files.map(file => uploadToCloudinary(file.buffer));
@@ -304,11 +282,9 @@ router.put('/:id', upload.array('portofolio', 10), async (req, res) => {
             portofolioUrls = portofolioUrls.concat(newUrls);
         }
 
-        // Parse `tipe_layanan` and `jasa_kontraktor` as arrays if they are not already
         const tipeLayananArray = tipe_layanan ? (Array.isArray(tipe_layanan) ? tipe_layanan : [tipe_layanan]) : vendorData.tipe_layanan;
         const jasaKontraktorArray = jasa_kontraktor ? (Array.isArray(jasa_kontraktor) ? jasa_kontraktor : [jasa_kontraktor]) : vendorData.jasa_kontraktor;
 
-        // Update data vendor only if certain fields are provided in the request
         const updatedData = {
             ...(userId && { userId }),
             tipe_layanan: tipeLayananArray,
@@ -317,6 +293,7 @@ router.put('/:id', upload.array('portofolio', 10), async (req, res) => {
             ...(lokasi_kantor && { lokasi_kantor }),
             ...(deskripsi_layanan && { deskripsi_layanan }),
             ...(iklan_persetujuan && { iklan_persetujuan }),
+            ...(fee_minimum && { fee_minimum }),
             portofolio: portofolioUrls
         };
 
@@ -330,7 +307,6 @@ router.put('/:id', upload.array('portofolio', 10), async (req, res) => {
 });
 
 
-// Hapus data vendor berdasarkan id
 router.delete('/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -345,7 +321,6 @@ router.delete('/:id', async (req, res) => {
 
         await vendorRef.delete();
 
-        // Menghapus rating terkait
         const ratingsSnapshot = await db.collection('ratings').where('id_vendor', '==', id).get();
         const deletePromises = ratingsSnapshot.docs.map(doc => doc.ref.delete());
         await Promise.all(deletePromises);
@@ -359,7 +334,6 @@ router.delete('/:id', async (req, res) => {
 
 
 
-// Default route for no query
 router.get("/", (req, res) => {
     res.json({
         status: "error",

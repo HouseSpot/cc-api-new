@@ -9,7 +9,6 @@ const { v4: uuidv4 } = require('uuid');
 const cloudinary = require('./cloudinary'); 
 const streamifier = require('streamifier'); 
 
-// Inisialisasi Firebase Admin SDK
 const serviceAccount = require('../serviceAccountKey.json');
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
@@ -44,10 +43,8 @@ router.post('/daftar', upload.single('profile'), async (req, res) => {
             });
         }
 
-        // Encrypt password using bcrypt
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // Use email to check if the user already exists
         const usersRef = db.collection('users');
         const querySnapshot = await usersRef.where('email', '==', email).get();
 
@@ -58,14 +55,12 @@ router.post('/daftar', upload.single('profile'), async (req, res) => {
             });
         }
 
-        // Upload profile image to Cloudinary
         let profileUrl = '';
         if (req.file) {
             const result = await uploadToCloudinary(req.file.buffer);
             profileUrl = result.secure_url;
         }
 
-        // Add user data to Firestore with a generated ID
         const id = uuidv4();
         await usersRef.doc(id).set({
             id,
@@ -79,19 +74,20 @@ router.post('/daftar', upload.single('profile'), async (req, res) => {
 
         return res.status(201).json({
             status: "success",
-            message: 'Data user berhasil ditambahkan'
+            message: 'Data user berhasil ditambahkan',
+            data: id
         });
     } catch (error) {
         console.error('Error:', error);
         return res.status(500).json({
             status: "error",
-            message: 'Terjadi kesalahan saat menambahkan data user'
+            message: 'Terjadi kesalahan saat menambahkan data user',
+            data: null
         });
     }
 });
 
 
-// GET data user berdasarkan id
 router.get('/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -111,7 +107,6 @@ router.get('/:id', async (req, res) => {
     }
 });
 
-// UPDATE data user berdasarkan id
 router.put('/update/:id', upload.single('profile'), async (req, res) => {
     try {
         const { id } = req.params;
@@ -130,14 +125,12 @@ router.put('/update/:id', upload.single('profile'), async (req, res) => {
 
         const userData = doc.data();
 
-        // Upload new profile image to Cloudinary if provided
         let profileUrl = userData.profile;
         if (req.file) {
             const result = await uploadToCloudinary(req.file.buffer);
             profileUrl = result.secure_url;
         }
 
-        // Check each value sent through req.body
         const updatedData = {
             nama: nama || userData.nama,
             no_hp: no_hp || userData.no_hp,
@@ -146,7 +139,6 @@ router.put('/update/:id', upload.single('profile'), async (req, res) => {
             password: password ? await bcrypt.hash(password, 10) : userData.password
         };
 
-        // Update user data
         await userRef.update(updatedData);
 
         const vendorRef = db.collection('vendors').doc(id);
@@ -171,7 +163,6 @@ router.put('/update/:id', upload.single('profile'), async (req, res) => {
     }
 });
 
-// DELETE data user berdasarkan id
 router.delete('/delete/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -183,10 +174,8 @@ router.delete('/delete/:id', async (req, res) => {
             return res.status(404).json({ status: "error", message: 'Data user tidak ditemukan' });
         }
 
-        // Delete the user document
         await userRef.delete();
 
-        // Find and delete corresponding vendor document(s) based on userId
         const vendorsRef = db.collection('vendors');
         const vendorSnapshot = await vendorsRef.where('id', '==', id).get();
 
@@ -200,7 +189,6 @@ router.delete('/delete/:id', async (req, res) => {
     }
 });
 
-// Authentication
 router.post('/auth', async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -225,7 +213,6 @@ router.post('/auth', async (req, res) => {
         const userDoc = querySnapshot.docs[0];
         const userData = userDoc.data();
 
-        // Memeriksa apakah password cocok
         const passwordMatch = await bcrypt.compare(password, userData.password);
 
         if (!passwordMatch) {
@@ -235,7 +222,6 @@ router.post('/auth', async (req, res) => {
             });
         }
 
-        // Jika email dan password cocok, beri respons berhasil
         return res.status(200).json({
             status: "success",
             message: 'Login berhasil',

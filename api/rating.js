@@ -5,26 +5,28 @@ const { v4: uuidv4 } = require('uuid');
 const db = admin.firestore();
 const router = express.Router();
 
-// Fungsi untuk menghasilkan ID acak sepanjang 20 karakter
 const generateRandomId = () => {
     return uuidv4().replace(/-/g, '').slice(0, 20);
 };
 
-// Menambah rating
 router.post('/add', async (req, res) => {
     try {
-        const { id_vendor, rating } = req.body;
+        const { id_vendor, rating, id_client } = req.body;
 
-        // Memastikan bahwa id_vendor dan rating ada
         if (!id_vendor || rating === undefined) {
             return res.status(400).json({ status: 'error', message: 'id_vendor dan rating diperlukan' });
         }
 
-        // Menambahkan rating ke Firestore
-        const id = generateRandomId();
+        if(id_client === undefined) {
+            return res.status(400).json({ status: 'error', message: 'id_client diperlukan' });
+        }
+
+        var id = `${id_vendor}_${id_client}`;
+
         await db.collection('ratings').doc(id).set({
             id_vendor,
-            rating: parseFloat(rating)
+            rating: parseFloat(rating),
+            id_client
         });
 
         return res.status(201).json({ status: 'success', message: 'Rating berhasil ditambahkan' });
@@ -34,12 +36,10 @@ router.post('/add', async (req, res) => {
     }
 });
 
-// Melihat rating
 router.get('/view/:id_vendor', async (req, res) => {
     try {
         const { id_vendor } = req.params;
 
-        // Mengambil semua rating untuk id_vendor tertentu
         const ratingsSnapshot = await db.collection('ratings').where('id_vendor', '==', id_vendor).get();
 
         if (ratingsSnapshot.empty) {
@@ -60,6 +60,35 @@ router.get('/view/:id_vendor', async (req, res) => {
     } catch (error) {
         console.error('Error:', error);
         return res.status(500).json({ status: 'error', message: 'Terjadi kesalahan saat melihat rating' });
+    }
+});
+
+router.get('/view/client', async (req, res) => {
+    try {
+        const { id_vendor, id_client } = req.query;
+
+        if (!id_vendor || !id_client) {
+            return res.status(400).json({ status: 'error', message: 'id_vendor and id_client are required' });
+        }
+
+        const ratingSnapshot = await db.collection('ratings')
+            .where('id_vendor', '==', id_vendor)
+            .where('id_client', '==', id_client)
+            .get();
+
+        if (ratingSnapshot.empty) {
+            return res.status(200).json({ status: 'success', message: 'Tidak ada rating yang kamu berikan', data: null });
+        }
+
+        const ratings = [];
+        ratingSnapshot.forEach(doc => {
+            ratings.push(doc.data());
+        });
+
+        return res.status(200).json({ status: 'success', message: 'Terdapat rating yang kamu berikan', data: ratings });
+    } catch (error) {
+        console.error('Error:', error);
+        return res.status(500).json({ status: 'error', message: 'Terjadi kesalahan saat mengambil rating', data: null });
     }
 });
 
